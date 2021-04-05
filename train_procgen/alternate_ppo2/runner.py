@@ -1,5 +1,6 @@
 import numpy as np
 from baselines.common.runners import AbstractEnvRunner
+import augmentations
 
 class Runner(AbstractEnvRunner):
     """
@@ -79,10 +80,12 @@ class AugmentedRunner(Runner):
         super().__init__(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
         self.args = args
         self.is_train = is_train
-        self.obs = self.augment(self.obs)
+        self.obs = self.augment(self.obs, self.rewards)
     
-    def augment(self, obs):
-        return obs
+    def augment(self, obs, rewards):
+        if self.args.mixup:
+            obs, rewards = augmentations.mixup_data(obs, rewards, self.args.mixup_alpha)
+        return obs, rewards
 
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
@@ -108,11 +111,9 @@ class AugmentedRunner(Runner):
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)
             mb_rewards.append(rewards)
-
-            if self.data_aug != 'no_aug' and self.is_train:
-                self.obs[:] = self.aug_func.do_augmentation(obs)
-            else:
-                self.obs[:] = obs
+            
+            if self.is_train:
+                self.obs, self.rewards = self.augment(obs, rewards)
 
         #batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
@@ -139,8 +140,9 @@ class AugmentedRunner(Runner):
         mb_returns = mb_advs + mb_values
 
         if self.is_train:
-            self.obs = self.augment(obs)
+            self.obs, self.rewards = self.augment(obs, rewards)
 
-        return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
+        return (*map(sf01, (mb_
+                            , mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
             mb_states, epinfos)
 
