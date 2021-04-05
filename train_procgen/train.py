@@ -12,9 +12,9 @@ from baselines.common.vec_env import (
 from baselines import logger
 from mpi4py import MPI
 import argparse
-from alternate_ppo2 import alt_ppo2
+from .alternate_ppo2 import alt_ppo2
 
-def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc, args, is_test_worker=False, log_dir='./tmp/procgen', comm=None, alternate_ppo=False, do_eval=False, eval_num_env=None, eval_env_name=None, eval_num_levels=None, eval_start_level=None, eval_distribution_mode=None):
+def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc, args, is_test_worker=False, log_dir='./tmp/procgen', comm=None, alternate_ppo=False, do_eval=False, eval_num_envs=None, eval_env_name=None, eval_num_levels=None, eval_start_level=None, eval_distribution_mode=None):
     learning_rate = 5e-4
     ent_coef = .01
     gamma = .999
@@ -64,6 +64,8 @@ def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, tim
     conv_fn = lambda x: build_impala_cnn(x, depths=[16,32,32], emb_size=256)
 
     logger.info("training")
+    print("mpi_rank_weight: " + str(mpi_rank_weight))
+    print("alternate_ppo: " + str(alternate_ppo))
     if alternate_ppo:
         alt_ppo2.learn(
             env=venv,
@@ -163,7 +165,7 @@ def main():
             comm=comm,
             alternate_ppo=args.alternate_ppo,
             do_eval=args.do_eval,
-            eval_num_env=args.eval_num_env,
+            eval_num_envs=args.eval_num_envs,
             eval_env_name=args.eval_env_name,
             eval_num_levels=args.eval_num_levels,
             eval_start_level=args.eval_start_level,

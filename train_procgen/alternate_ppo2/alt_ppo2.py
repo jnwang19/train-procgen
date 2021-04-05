@@ -10,7 +10,7 @@ try:
     from mpi4py import MPI
 except ImportError:
     MPI = None
-from baselines.ppo2.runner import AugmentedRunner
+from .runner import AugmentedRunner
 
 
 def constfn(val):
@@ -101,7 +101,7 @@ def learn(*, network, env, total_timesteps, eval_env=None, seed=None, nsteps=204
 
     # Instantiate the model object (that creates act_model and train_model)
     if model_fn is None:
-        from alternate_ppo2.model import Model
+        from .model import Model
         model_fn = Model
 
     model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
@@ -128,6 +128,7 @@ def learn(*, network, env, total_timesteps, eval_env=None, seed=None, nsteps=204
     nupdates = total_timesteps//nbatch
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
+        tstart = time.perf_counter()
         frac = 1.0 - (update - 1.0) / nupdates
         # Calculate the learning rate
         lrnow = lr(frac)

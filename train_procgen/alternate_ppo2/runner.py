@@ -1,6 +1,6 @@
 import numpy as np
 from baselines.common.runners import AbstractEnvRunner
-import augmentations
+from . import augmentations
 
 class Runner(AbstractEnvRunner):
     """
@@ -80,9 +80,10 @@ class AugmentedRunner(Runner):
         super().__init__(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
         self.args = args
         self.is_train = is_train
-        self.obs = self.augment(self.obs, self.rewards)
+        # self.obs = self.augment(self.obs, self.rewards)
     
     def augment(self, obs, rewards):
+        print("doing mixup\n" + str(self.args.mixup))
         if self.args.mixup:
             obs, rewards = augmentations.mixup_data(obs, rewards, self.args.mixup_alpha)
         return obs, rewards
@@ -142,7 +143,6 @@ class AugmentedRunner(Runner):
         if self.is_train:
             self.obs, self.rewards = self.augment(obs, rewards)
 
-        return (*map(sf01, (mb_
-                            , mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
+        return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
             mb_states, epinfos)
 
