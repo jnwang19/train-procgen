@@ -134,7 +134,11 @@ def main():
     parser.add_argument('--eval_num_levels', type=int, default=500)
     parser.add_argument('--eval_start_level', type=int, default=500)
     parser.add_argument('--eval_distribution_mode', type=str, default='easy', choices=["easy", "hard", "exploration", "memory", "extreme"])
-
+    
+    # For augmentations
+    # Mixup
+    parser.add_argument('--mixup', action='store_true')
+    parser.add_argument('--mixup_alpha', type=float, default=1.0)
 
     args = parser.parse_args()
 
