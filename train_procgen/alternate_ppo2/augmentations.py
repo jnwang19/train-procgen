@@ -2,10 +2,9 @@ import numpy as np
 import torch
 
 # Based on https://github.com/hongyi-zhang/mixup/blob/master/cifar/utils.py
-
-def mixup_data(x, y, alpha=1.0, use_cuda=True):
-
-    '''Compute the mixup data. Return mixed inputs, pairs of targets, and lambda'''
+def mixup_data(x, y, alpha=1.0, use_cuda=False):
+    '''Compute the mixup data. Return mixed inputs and targets.'''
+    
     if alpha > 0.:
         lam = np.random.beta(alpha, alpha)
     else:
