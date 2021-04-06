@@ -191,6 +191,7 @@ def learn(*, network, env, total_timesteps, eval_env=None, seed=None, nsteps=204
         if update % log_interval == 0 or update == 1:
             # Calculates if value function is a good predicator of the returns (ev > 1)
             # or if it's just worse than predicting nothing (ev =< 0)
+            print("logging")
             ev = explained_variance(values, returns)
             logger.logkv("misc/serial_timesteps", update*nsteps)
             logger.logkv("misc/nupdates", update)

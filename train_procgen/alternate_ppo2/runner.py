@@ -83,7 +83,6 @@ class AugmentedRunner(Runner):
         # self.obs = self.augment(self.obs, self.rewards)
     
     def augment(self, obs, rewards):
-        print("doing mixup\n" + str(self.args.mixup))
         if self.args.mixup:
             obs, rewards = augmentations.mixup_data(obs, rewards, self.args.mixup_alpha)
         return obs, rewards
