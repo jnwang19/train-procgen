@@ -1,5 +1,5 @@
 import numpy as np
-from baselines.common.runners import AbstractEnvRunner
+from replay_ppo2.runners import AbstractEnvRunner
 
 class Runner(AbstractEnvRunner):
     """

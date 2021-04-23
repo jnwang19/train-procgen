@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 import os.path as osp
-from baselines_replay import logger
+from baselines import logger
 from collections import deque
 from baselines.common import explained_variance, set_global_seeds
 from baselines.common.vec_env import VecExtractDictObs, VecMonitor, VecNormalize

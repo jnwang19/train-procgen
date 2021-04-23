@@ -1,15 +1,15 @@
 import tensorflow as tf
-from baselines_replay.ppo2 import ppo2
-from baselines_replay.common.models import build_impala_cnn
-from baselines_replay.common.mpi_util import setup_mpi_gpus
+from replay_ppo2 import ppo2
+from baselines.common.models import build_impala_cnn
+from baselines.common.mpi_util import setup_mpi_gpus
 from procgen_replay.procgen import ProcgenEnv
-from baselines_replay.common.vec_env import (
+from baselines.common.vec_env import (
     VecExtractDictObs,
     VecMonitor,
     VecFrameStack,
     VecNormalize
 )
-from baselines_replay import logger
+from baselines import logger
 from mpi4py import MPI
 import argparse
 import numpy as np
