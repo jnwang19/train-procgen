@@ -4,17 +4,17 @@ import numpy as np
 import os.path as osp
 from baselines_replay import logger
 from collections import deque
-from baselines_replay.common import explained_variance, set_global_seeds
-from baselines_replay.common.policies import build_policy
+from baselines.common import explained_variance, set_global_seeds
+from baselines.common.vec_env import VecExtractDictObs, VecMonitor, VecNormalize
+from replay_ppo2.policies import build_policy
 try:
     from mpi4py import MPI
 except ImportError:
     MPI = None
-from baselines_replay.ppo2.runner import Runner, EvalRunner
-from baselines_replay.ppo2.envs import VecProcgen
-from baselines_replay.ppo2.level_sampler import LevelSampler
-from baselines_replay.ppo2.storage import RolloutStorage
-from baselines_replay.common.vec_env import VecExtractDictObs, VecMonitor, VecNormalize
+from replay_ppo2.runner import Runner, EvalRunner
+from replay_ppo2.envs import VecProcgen
+from replay_ppo2.level_sampler import LevelSampler
+from replay_ppo2.storage import RolloutStorage
 from procgen_replay.procgen import ProcgenEnv
 
 
