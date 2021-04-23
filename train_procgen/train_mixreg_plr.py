@@ -30,7 +30,6 @@ def main():
     ppo_epochs = 3
     clip_range = .2
     max_grad_norm = 0.5
-    timesteps_per_proc = 100_000_000
     use_vf_clipping = True
 
     # Parse arguments
@@ -55,7 +54,12 @@ def main():
     parser.add_argument('--mix_mode', type=str, default='nomix',
                         choices=['nomix', 'mixreg', 'mixobs'])
     parser.add_argument('--mix_alpha', type=float, default=0.2)
+    parser.add_argument('--timesteps_per_proc', type=int, default=1_000_000)
+    parser.add_argument('--save_dir', type=str, default='gdrive/MyDrive/182 Project/')
     args = parser.parse_args()
+
+    timesteps_per_proc = args.timesteps_per_proc
+    log_dir = args.save_dir
 
     # Setup test worker
     comm = MPI.COMM_WORLD
@@ -80,7 +84,7 @@ def main():
     log_comm = comm.Split(1 if is_test_worker else 0, 0)
     format_strs = ['csv', 'stdout'] if log_comm.Get_rank() == 0 else []
     logger.configure(
-        dir=LOG_DIR +
+        dir=log_dir +
         f'/{args.level_setup}/{args.mix_mode}/{env_name}/run_{args.run_id}',
         format_strs=format_strs
     )
