@@ -99,7 +99,8 @@ def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, tim
             init_fn=None,
             vf_coef=0.5,
             max_grad_norm=0.5,
-            args=args
+            args=args,
+            load_path=args.resume_path
         )
     else:
         ppo2.learn(
@@ -138,6 +139,7 @@ def main():
     parser.add_argument('--test_worker_interval', type=int, default=0)
     parser.add_argument('--timesteps_per_proc', type=int, default=50_000_000)
     parser.add_argument('--alternate_ppo', action='store_true')
+    parser.add_argument('--resume_path', type=str, default=None)
 
     # For evaluation (validation set)
     parser.add_argument('--do_eval', action='store_true')
