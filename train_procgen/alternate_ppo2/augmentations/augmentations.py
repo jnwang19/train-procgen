@@ -135,6 +135,8 @@ def sharpness(pil_img, level):
 
 
 augmentations = [
-    autocontrast, equalize, posterize, rotate, solarize, shear_x, shear_y,
-    translate_x, translate_y, color, contrast, brightness, sharpness
+    autocontrast
 ]
+
+unused_augmentations = [equalize, posterize, rotate, solarize, shear_x, shear_y,
+    translate_x, translate_y, color, contrast, brightness, sharpness]
