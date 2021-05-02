@@ -1,6 +1,21 @@
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
+from baselines.a2c.utils import conv, fc, conv_to_fc
+from baselines.common.tf_util import get_session
+from baselines.common.tf_util import initialize
+
+def cnn_small(layer_names=['c1', 'c2', 'fc1'], **conv_kwargs):
+    def network_fn(X):
+        h = tf.cast(X, tf.float32) / 255.
+
+        activ = tf.nn.relu
+        h = activ(conv(h, layer_names[0], nf=8, rf=8, stride=4, init_scale=np.sqrt(2), **conv_kwargs))
+        h = activ(conv(h, layer_names[1], nf=16, rf=4, stride=2, init_scale=np.sqrt(2), **conv_kwargs))
+        h = conv_to_fc(h)
+        h = activ(fc(h, layer_names[2], nh=128, init_scale=np.sqrt(2)))
+        return h
+    return network_fn
 
 class LevelSampler():
     def __init__(
@@ -35,9 +50,20 @@ class LevelSampler():
         self.next_seed_index = 0 # Only used for sequential strategy
 
         if self.strategy == 'rnd':
-            self.target_net = lambda x: build_impala_cnn(x, depths=[16,32,32])
-            self.pred_net = lambda x: build_impala_cnn(x, depths=[16,32,32])
-            self.optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
+            self.sess = sess = get_session()
+            pred_net = cnn_small(['c3','c4','fc2'])
+            target_net = cnn_small(['c1','c2','fc1'])
+
+            self.x = x = tf.placeholder(tf.float32, [None,64,64,3])
+            y_model = pred_net(x)
+            y = target_net(x)
+            self.error = error = tf.square(y - y_model)
+            train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'c3') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'c4') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc2')
+            self.train_op = tf.train.GradientDescentOptimizer(0.01).minimize(error, var_list=train_vars)
+
+            self.sess.run(tf.global_variables_initializer())
+
+        self.sampled_levels = []
 
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
@@ -102,20 +128,12 @@ class LevelSampler():
         return np.mean(np.abs(advantages))
 
     def _rand_net_distillation(self, **kwargs):
-        def loss(model, x, y):
-            y_ = model(x)
-            return tf.keras.losses.MSE(y_true=y, y_pred=y_)
+        _, loss_value = self.sess.run([self.train_op, self.error], feed_dict={self.x: kwargs['obs']})
 
-        def grad(model, inputs, targets):
-            with tf.GradientTape() as tape:
-                loss_value = loss(model, inputs, targets)
-            return loss_value, tape.gradient(loss_value, model.trainable_variables)
+        if loss_value.shape[0] == 0:
+            return 0
 
-        labels = self.target_net(kwargs['obs'])
-        loss_value, grads = grad(model, kwargs['obs'], labels)
-        optimizer.apply_gradients(zip(grads, model.trainable_variables))
-
-        return loss_value
+        return np.mean(loss_value)
 
     @property
     def requires_value_buffers(self):
@@ -205,6 +223,8 @@ class LevelSampler():
         seed = self.seeds[seed_idx]
 
         self._update_staleness(seed_idx)
+
+        self.sampled_levels.append(int(seed))
 
         return int(seed)
 
