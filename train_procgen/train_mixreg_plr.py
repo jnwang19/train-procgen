@@ -3,11 +3,11 @@ import argparse
 
 import skimage
 import tensorflow as tf
-from baselines.ppo2 import ppo2
+from data_aug_replay_ppo2 import ppo2
 from baselines.common.mpi_util import setup_mpi_gpus
 from baselines.common.vec_env import VecExtractDictObs, VecMonitor, VecNormalize
 from baselines import logger
-from procgen import ProcgenEnv
+from procgen_replay.procgen import ProcgenEnv
 from mpi4py import MPI
 
 from data_aug_replay_ppo2.model import get_mixreg_model

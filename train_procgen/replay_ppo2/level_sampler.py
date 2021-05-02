@@ -1,5 +1,6 @@
 from collections import namedtuple
 import numpy as np
+import tensorflow as tf
 
 class LevelSampler():
     def __init__(
@@ -33,6 +34,11 @@ class LevelSampler():
 
         self.next_seed_index = 0 # Only used for sequential strategy
 
+        if self.strategy == 'rnd':
+            self.target_net = lambda x: build_impala_cnn(x, depths=[16,32,32])
+            self.pred_net = lambda x: build_impala_cnn(x, depths=[16,32,32])
+            self.optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
+
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
 
@@ -45,12 +51,12 @@ class LevelSampler():
             return
 
         # Update with a RolloutStorage object
-        if self.strategy == 'gae':
-            score_function = self._average_gae
-        elif self.strategy == 'value_l1':
+        if self.strategy == 'value_l1':
             score_function = self._average_value_l1
-        elif self.strategy == 'one_step_td_error':
-            score_function = self._one_step_td_error
+        elif self.strategy == 'policy_entropy':
+            score_function = self._average_entropy
+        elif self.strategy == 'rnd':
+            score_function = self._rand_net_distillation
         else:
             raise ValueError(f'Unsupported strategy, {self.strategy}')
 
@@ -80,13 +86,12 @@ class LevelSampler():
 
         return merged_score
 
-    def _average_gae(self, **kwargs):
-        returns = kwargs['returns']
-        value_preds = kwargs['value_preds']
+    def _average_entropy(self, **kwargs):
+        episode_logits = kwargs['episode_logits']
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
 
-        advantages = returns - value_preds
-
-        return np.mean(advantages)
+        return (-torch.exp(episode_logits)*episode_logits).sum(-1).mean().item()/max_entropy
 
     def _average_value_l1(self, **kwargs):
         returns = kwargs['returns']
@@ -96,18 +101,29 @@ class LevelSampler():
 
         return np.mean(np.abs(advantages))
 
-    def _one_step_td_error(self, **kwargs):
-        rewards = kwargs['rewards']
-        value_preds = kwargs['value_preds']
+    def _rand_net_distillation(self, **kwargs):
+        def loss(model, x, y):
+            y_ = model(x)
+            return tf.keras.losses.MSE(y_true=y, y_pred=y_)
 
-        max_t = len(rewards)
-        td_errors = (rewards[:-1] + value_preds[:max_t-1] - value_preds[1:max_t]).abs()
+        def grad(model, inputs, targets):
+            with tf.GradientTape() as tape:
+                loss_value = loss(model, inputs, targets)
+            return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
-        return np.mean(np.abs(td_errors))
+        labels = self.target_net(kwargs['obs'])
+        loss_value, grads = grad(model, kwargs['obs'], labels)
+        optimizer.apply_gradients(zip(grads, model.trainable_variables))
+
+        return loss_value
 
     @property
     def requires_value_buffers(self):
-        return self.strategy in ['gae', 'value_l1', 'one_step_td_error']    
+        return self.strategy in ['value_l1']    
+
+    @property
+    def requires_obs_buffers(self):
+        return self.strategy in ['rnd']    
 
     def _update_with_rollouts(self, rollouts, score_function):
         level_seeds = rollouts.level_seeds
@@ -131,11 +147,14 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:t,actor_index]
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:t,actor_index]
                     score_function_kwargs['rewards'] = rollouts.rewards[start_t:t,actor_index]
                     score_function_kwargs['value_preds'] = rollouts.value_preds[start_t:t,actor_index]
+                if self.requires_obs_buffers:
+                    score_function_kwargs['obs'] = rollouts.obs[start_t:t,actor_index]
 
                 score = score_function(**score_function_kwargs)
                 num_steps = len(episode_logits)
@@ -149,11 +168,14 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:,actor_index]
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:,actor_index]
                     score_function_kwargs['rewards'] = rollouts.rewards[start_t:,actor_index]
                     score_function_kwargs['value_preds'] = rollouts.value_preds[start_t:,actor_index]
+                if self.requires_obs_buffers:
+                    score_function_kwargs['obs'] = rollouts.obs[start_t:t,actor_index]
 
                 score = score_function(**score_function_kwargs)
                 num_steps = len(episode_logits)
