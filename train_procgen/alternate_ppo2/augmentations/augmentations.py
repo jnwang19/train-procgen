@@ -134,7 +134,7 @@ def sharpness(pil_img, level):
     return ImageEnhance.Sharpness(pil_img).enhance(level)
 
 
-augmentations = [rotate]
+augmentations = [solarize]
 
     
 unused_augmentations = [autocontrast, equalize, posterize, rotate, solarize, shear_x, shear_y,
