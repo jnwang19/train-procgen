@@ -75,6 +75,7 @@ def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, tim
         init_fn=None,
         vf_coef=0.5,
         max_grad_norm=0.5,
+        level_sampler_strategy=args.level_sampler_strategy
     )
     model.save(save_dir + 'models/' + model_name)
 
@@ -87,6 +88,7 @@ def main():
     parser.add_argument('--start_level', type=int, default=500)
     parser.add_argument('--test_worker_interval', type=int, default=0)
     parser.add_argument('--timesteps_per_proc', type=int, default=1_000_000)
+    parser.add_argument('--level_sampler_strategy', type=str, default='value_l1')
     parser.add_argument('--model_name', type=str, default='model')
     parser.add_argument('--save_dir', type=str, default='gdrive/MyDrive/182 Project/')
 
