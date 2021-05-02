@@ -14,7 +14,7 @@ from mpi4py import MPI
 import argparse
 import numpy as np
 
-def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc, model_name, is_test_worker=False, save_dir='./', comm=None):
+def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc,level_sampler_strategy, model_name, is_test_worker=False, save_dir='./', comm=None):
     learning_rate = 5e-4
     ent_coef = .01
     gamma = .999
@@ -32,7 +32,7 @@ def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, tim
 
     if log_dir is not None:
         log_comm = comm.Split(1 if is_test_worker else 0, 0)
-        format_strs = ['csv', 'stdout'] if log_comm.Get_rank() == 0 else []
+        format_strs = ['csv', 'stdout','tensorboard'] if log_comm.Get_rank() == 0 else []
         logger.configure(comm=log_comm, dir=log_dir, format_strs=format_strs)
 
     logger.info("creating environment")
@@ -75,7 +75,7 @@ def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, tim
         init_fn=None,
         vf_coef=0.5,
         max_grad_norm=0.5,
-        level_sampler_strategy=args.level_sampler_strategy
+        level_sampler_strategy=level_sampler_strategy
     )
     model.save(save_dir + 'models/' + model_name)
 
@@ -109,6 +109,7 @@ def main():
         args.num_levels,
         args.start_level,
         args.timesteps_per_proc,
+        args.level_sampler_strategy,
         args.model_name,
         is_test_worker=is_test_worker,
         save_dir=args.save_dir, 

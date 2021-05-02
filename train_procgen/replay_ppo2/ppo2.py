@@ -266,6 +266,8 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
             print('Saving to', savepath)
             model.save(savepath)
 
+    np.save('sampled_levels.npy', self.level_sampler.sampled_levels)
+
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)
 def safemean(xs):
