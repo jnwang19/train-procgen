@@ -57,13 +57,16 @@ class LevelSampler():
             self.x = x = tf.placeholder(tf.float32, [None,64,64,3])
             y_model = pred_net(x)
             y = target_net(x)
-            self.error = error = tf.square(y - y_model)
+            self.error = error = tf.math.reduce_mean(tf.square(y - y_model))
             train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'c3') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'c4') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc2')
             self.train_op = tf.train.GradientDescentOptimizer(0.01).minimize(error, var_list=train_vars)
 
-            self.sess.run(tf.global_variables_initializer())
+            initialize()
+
+            self.train_iters = 1
 
         self.sampled_levels = []
+        self.iter = 0
 
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
@@ -117,7 +120,7 @@ class LevelSampler():
         num_actions = self.action_space.n
         max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
 
-        return (-torch.exp(episode_logits)*episode_logits).sum(-1).mean().item()/max_entropy
+        return (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy
 
     def _average_value_l1(self, **kwargs):
         returns = kwargs['returns']
@@ -128,12 +131,17 @@ class LevelSampler():
         return np.mean(np.abs(advantages))
 
     def _rand_net_distillation(self, **kwargs):
-        _, loss_value = self.sess.run([self.train_op, self.error], feed_dict={self.x: kwargs['obs']})
+        if kwargs['obs'].shape[0] == 0:
+          return 0
+        
+        loss_value = self.sess.run([self.error], feed_dict={self.x: kwargs['obs']})[0]
 
-        if loss_value.shape[0] == 0:
-            return 0
+        return loss_value
 
-        return np.mean(loss_value)
+    def rnd_update(self, obs):
+        obs = obs.reshape((-1, 64, 64, 3))
+        for i in range(self.train_iters):
+            _, loss_value = self.sess.run([self.train_op, self.error], feed_dict={self.x: obs})
 
     @property
     def requires_value_buffers(self):
@@ -149,6 +157,10 @@ class LevelSampler():
         done = ~(rollouts.masks > 0)
         total_steps, num_actors = policy_logits.shape[:2]
         num_decisions = len(policy_logits)
+
+        if self.strategy == 'rnd':
+            self.rnd_update(rollouts.obs)
+        self.iter += 1
 
         for actor_index in range(num_actors):
             done_steps = np.array(done[:,actor_index].nonzero()).T[:total_steps,0]
@@ -175,6 +187,7 @@ class LevelSampler():
                     score_function_kwargs['obs'] = rollouts.obs[start_t:t,actor_index]
 
                 score = score_function(**score_function_kwargs)
+
                 num_steps = len(episode_logits)
                 self.update_seed_score(actor_index, seed_idx_t, score, num_steps)
 
@@ -193,7 +206,7 @@ class LevelSampler():
                     score_function_kwargs['rewards'] = rollouts.rewards[start_t:,actor_index]
                     score_function_kwargs['value_preds'] = rollouts.value_preds[start_t:,actor_index]
                 if self.requires_obs_buffers:
-                    score_function_kwargs['obs'] = rollouts.obs[start_t:t,actor_index]
+                    score_function_kwargs['obs'] = rollouts.obs[start_t:,actor_index]
 
                 score = score_function(**score_function_kwargs)
                 num_steps = len(episode_logits)
@@ -226,6 +239,8 @@ class LevelSampler():
 
         self.sampled_levels.append(int(seed))
 
+        # print(seed)
+
         return int(seed)
 
     def _sample_unseen_level(self):
@@ -241,7 +256,7 @@ class LevelSampler():
         if not strategy:
             strategy = self.strategy
 
-        if strategy == 'random':
+        if strategy == 'random' or self.iter < 150:
             seed_idx = np.random.choice(range((len(self.seeds))))
             seed = self.seeds[seed_idx]
             return int(seed)
