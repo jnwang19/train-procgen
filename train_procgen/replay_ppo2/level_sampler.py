@@ -64,6 +64,7 @@ class LevelSampler():
             initialize()
 
             self.train_iters = 1
+            self.random_sampling_iters = 150
 
         self.sampled_levels = []
         self.iter = 0
@@ -239,7 +240,10 @@ class LevelSampler():
 
         self.sampled_levels.append(int(seed))
 
-        # print(seed)
+        if self.strategy == 'rnd' and self.iter < self.random_sampling_iters:
+            seed_idx = np.random.choice(range((len(self.seeds))))
+            seed = self.seeds[seed_idx]
+            return int(seed)
 
         return int(seed)
 
@@ -256,7 +260,7 @@ class LevelSampler():
         if not strategy:
             strategy = self.strategy
 
-        if strategy == 'random' or self.iter < 150:
+        if strategy == 'random':
             seed_idx = np.random.choice(range((len(self.seeds))))
             seed = self.seeds[seed_idx]
             return int(seed)
