@@ -14,7 +14,7 @@ from mpi4py import MPI
 import argparse
 import numpy as np
 
-def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc,level_sampler_strategy, model_name, is_test_worker=False, save_dir='./', comm=None):
+def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc, level_sampler_strategy, score_transform, model_name, is_test_worker=False, save_dir='./', comm=None):
     learning_rate = 5e-4
     ent_coef = .01
     gamma = .999
@@ -75,7 +75,8 @@ def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, tim
         init_fn=None,
         vf_coef=0.5,
         max_grad_norm=0.5,
-        level_sampler_strategy=level_sampler_strategy
+        level_sampler_strategy=level_sampler_strategy,
+        score_transform=score_transform
     )
     model.save(save_dir + 'models/' + model_name)
 
@@ -89,6 +90,7 @@ def main():
     parser.add_argument('--test_worker_interval', type=int, default=0)
     parser.add_argument('--timesteps_per_proc', type=int, default=1_000_000)
     parser.add_argument('--level_sampler_strategy', type=str, default='value_l1')
+    parser.add_argument('--score_transform', type=str, default='rank')
     parser.add_argument('--model_name', type=str, default='model')
     parser.add_argument('--save_dir', type=str, default='gdrive/MyDrive/182 Project/')
 
@@ -110,6 +112,7 @@ def main():
         args.start_level,
         args.timesteps_per_proc,
         args.level_sampler_strategy,
+        args.score_transform,
         args.model_name,
         is_test_worker=is_test_worker,
         save_dir=args.save_dir, 

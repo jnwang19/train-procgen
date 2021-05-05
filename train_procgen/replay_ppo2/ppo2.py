@@ -28,7 +28,7 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
             log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
             save_interval=0, load_path=None, model_fn=None, update_fn=None, init_fn=None, mpi_rank_weight=1, comm=None,
             num_processes=64, num_steps=256, level_replay_temperature=0.1, level_replay_rho=1.0, level_replay_nu=0.5, level_replay_alpha=1.0,
-            staleness_coef=0.1, staleness_temperature=1.0, level_sampler_strategy='value_l1', **network_kwargs):
+            staleness_coef=0.1, staleness_temperature=1.0, level_sampler_strategy='value_l1', score_transform='rank', **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -96,7 +96,7 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
         num_actors=num_processes,
         strategy=level_sampler_strategy,
         replay_schedule='proportionate',
-        score_transform='rank',
+        score_transform=score_transform,
         temperature=level_replay_temperature,
         rho=level_replay_rho,
         nu=level_replay_nu, 
@@ -266,7 +266,7 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
             print('Saving to', savepath)
             model.save(savepath)
 
-    np.save('sampled_levels.npy', self.level_sampler.sampled_levels)
+    np.save('gdrive/MyDrive/182 Project/sampled_levels.npy', level_sampler.sampled_levels)
 
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)
