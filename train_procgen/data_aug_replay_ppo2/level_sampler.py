@@ -17,6 +17,9 @@ def cnn_small(layer_names=['c1', 'c2', 'fc1'], **conv_kwargs):
         return h
     return network_fn
 
+MAX_ENTROPY = 0.003280711731851355
+MIN_ENTROPY = 0.00292236834768195
+
 class LevelSampler():
     def __init__(
         self, seeds, obs_space, action_space, num_actors=1, 
@@ -68,6 +71,11 @@ class LevelSampler():
 
         self.sampled_levels = []
         self.iter = 0
+
+        self.value_avg = []
+        self.value_var = []
+        self.value_range = []
+        self.entropy = []
 
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
@@ -144,6 +152,21 @@ class LevelSampler():
         for i in range(self.train_iters):
             _, loss_value = self.sess.run([self.train_op, self.error], feed_dict={self.x: obs})
 
+    def update_stats(self, value_preds, episode_logits):
+        self.value_avg.append(np.mean(value_preds))
+        self.value_var.append(np.var(value_preds))
+        self.value_range.append(np.max(value_preds) - np.min(value_preds))
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
+        self.entropy.append((-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy)
+
+    def update_staleness_coeff(self, episode_logits):
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
+        new_staleness_coeff = 1 - (MAX_ENTROPY - (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy) / (MAX_ENTROPY - MIN_ENTROPY)
+        new_staleness_coeff = max(0, min(1, new_staleness_coeff))
+        self.staleness_coef = new_staleness_coeff
+
     @property
     def requires_value_buffers(self):
         return self.strategy in ['value_l1']    
@@ -162,6 +185,11 @@ class LevelSampler():
         if self.strategy == 'rnd':
             self.rnd_update(rollouts.obs)
         self.iter += 1
+
+        episode_logits = policy_logits.reshape(-1, 15)
+        episode_logits = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
+        self.update_staleness_coeff(episode_logits)
+        # self.update_stats(rollouts.value_preds.reshape(-1, 1), episode_logits)
 
         for actor_index in range(num_actors):
             done_steps = np.array(done[:,actor_index].nonzero()).T[:total_steps,0]

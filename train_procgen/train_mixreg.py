@@ -97,6 +97,13 @@ def main():
     venv = VecMonitor(venv=venv, filename=None, keep_buf=100)
     venv = VecNormalize(venv=venv, ob=False)
 
+    eval_env = ProcgenEnv(num_envs=num_envs, env_name=env_name, num_levels=500, start_level=0, distribution_mode=args.distribution_mode)
+    eval_env = VecExtractDictObs(eval_env, "rgb")
+    eval_env = VecMonitor(
+        venv=eval_env, filename=None, keep_buf=100,
+    )
+    eval_env = VecNormalize(venv=eval_env, ob=False, ret=True)
+
     # Setup Tensorflow
     logger.info("creating tf session")
     if args.gpus_id:
@@ -125,6 +132,7 @@ def main():
         env=venv,
         network=conv_fn,
         total_timesteps=args.timesteps_per_proc,
+        eval_env=eval_env,
         save_interval=0,
         nsteps=nsteps,
         nminibatches=nminibatches,

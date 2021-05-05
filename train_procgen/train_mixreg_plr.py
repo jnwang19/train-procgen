@@ -128,6 +128,7 @@ def main():
         network=conv_fn,
         total_timesteps=timesteps_per_proc,
         num_levels=num_levels,
+        start_level=start_level,
         eval_env=eval_env,
         save_interval=0,
         nsteps=nsteps,
