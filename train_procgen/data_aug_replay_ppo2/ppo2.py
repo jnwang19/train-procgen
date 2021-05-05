@@ -28,7 +28,7 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
             log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
             save_interval=0, load_path=None, model_fn=None, update_fn=None, init_fn=None, mpi_rank_weight=1, comm=None,
             num_processes=64, num_steps=256, level_replay_temperature=0.1, level_replay_rho=1.0, level_replay_nu=0.5, level_replay_alpha=1.0,
-            staleness_coef=0.1, staleness_temperature=1.0, **network_kwargs):
+            staleness_coef=0.1, staleness_temperature=1.0, level_sampler_strategy='value_l1', score_transform='rank', **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -94,9 +94,9 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
 
     level_sampler_args = dict(
         num_actors=num_processes,
-        strategy='value_l1',
+        strategy=level_sampler_strategy,
         replay_schedule='proportionate',
-        score_transform='rank',
+        score_transform=score_transform,
         temperature=level_replay_temperature,
         rho=level_replay_rho,
         nu=level_replay_nu, 

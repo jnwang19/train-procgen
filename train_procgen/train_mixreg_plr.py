@@ -55,6 +55,8 @@ def main():
                         choices=['nomix', 'mixreg', 'mixobs'])
     parser.add_argument('--mix_alpha', type=float, default=0.2)
     parser.add_argument('--timesteps_per_proc', type=int, default=1_000_000)
+    parser.add_argument('--level_sampler_strategy', type=str, default='value_l1')
+    parser.add_argument('--score_transform', type=str, default='rank')
     parser.add_argument('--save_dir', type=str, default='gdrive/MyDrive/182 Project/')
     args = parser.parse_args()
 
@@ -145,6 +147,8 @@ def main():
         vf_coef=vf_coef,
         max_grad_norm=max_grad_norm,
         data_aug=args.data_aug,
+        level_sampler_strategy=args.level_sampler_strategy,
+        score_transform=args.score_transform,
         model_fn=get_mixreg_model(mix_mode=args.mix_mode, mix_alpha=args.mix_alpha,
                                   use_l2reg=args.use_l2reg, l2reg_coeff=args.l2reg_coeff),
     )
