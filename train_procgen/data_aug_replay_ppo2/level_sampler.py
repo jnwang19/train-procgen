@@ -1,5 +1,24 @@
 from collections import namedtuple
 import numpy as np
+import tensorflow as tf
+from baselines.a2c.utils import conv, fc, conv_to_fc
+from baselines.common.tf_util import get_session
+from baselines.common.tf_util import initialize
+
+def cnn_small(layer_names=['c1', 'c2', 'fc1'], **conv_kwargs):
+    def network_fn(X):
+        h = tf.cast(X, tf.float32) / 255.
+
+        activ = tf.nn.relu
+        h = activ(conv(h, layer_names[0], nf=8, rf=8, stride=4, init_scale=np.sqrt(2), **conv_kwargs))
+        h = activ(conv(h, layer_names[1], nf=16, rf=4, stride=2, init_scale=np.sqrt(2), **conv_kwargs))
+        h = conv_to_fc(h)
+        h = activ(fc(h, layer_names[2], nh=128, init_scale=np.sqrt(2)))
+        return h
+    return network_fn
+
+MAX_ENTROPY = 0.003280711731851355
+MIN_ENTROPY = 0.00292236834768195
 
 class LevelSampler():
     def __init__(
@@ -33,6 +52,31 @@ class LevelSampler():
 
         self.next_seed_index = 0 # Only used for sequential strategy
 
+        if self.strategy == 'rnd':
+            self.sess = sess = get_session()
+            pred_net = cnn_small(['c3','c4','fc2'])
+            target_net = cnn_small(['c1','c2','fc1'])
+
+            self.x = x = tf.placeholder(tf.float32, [None,64,64,3])
+            y_model = pred_net(x)
+            y = target_net(x)
+            self.error = error = tf.math.reduce_mean(tf.square(y - y_model))
+            train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'c3') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'c4') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc2')
+            self.train_op = tf.train.GradientDescentOptimizer(0.01).minimize(error, var_list=train_vars)
+
+            initialize()
+
+            self.train_iters = 1
+            self.random_sampling_iters = 150
+
+        self.sampled_levels = []
+        self.iter = 0
+
+        self.value_avg = []
+        self.value_var = []
+        self.value_range = []
+        self.entropy = []
+
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
 
@@ -45,12 +89,12 @@ class LevelSampler():
             return
 
         # Update with a RolloutStorage object
-        if self.strategy == 'gae':
-            score_function = self._average_gae
-        elif self.strategy == 'value_l1':
+        if self.strategy == 'value_l1':
             score_function = self._average_value_l1
-        elif self.strategy == 'one_step_td_error':
-            score_function = self._one_step_td_error
+        elif self.strategy == 'policy_entropy':
+            score_function = self._average_entropy
+        elif self.strategy == 'rnd':
+            score_function = self._rand_net_distillation
         else:
             raise ValueError(f'Unsupported strategy, {self.strategy}')
 
@@ -80,13 +124,12 @@ class LevelSampler():
 
         return merged_score
 
-    def _average_gae(self, **kwargs):
-        returns = kwargs['returns']
-        value_preds = kwargs['value_preds']
+    def _average_entropy(self, **kwargs):
+        episode_logits = kwargs['episode_logits']
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
 
-        advantages = returns - value_preds
-
-        return np.mean(advantages)
+        return (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy
 
     def _average_value_l1(self, **kwargs):
         returns = kwargs['returns']
@@ -96,18 +139,41 @@ class LevelSampler():
 
         return np.mean(np.abs(advantages))
 
-    def _one_step_td_error(self, **kwargs):
-        rewards = kwargs['rewards']
-        value_preds = kwargs['value_preds']
+    def _rand_net_distillation(self, **kwargs):
+        if kwargs['obs'].shape[0] == 0:
+          return 0
+        
+        loss_value = self.sess.run([self.error], feed_dict={self.x: kwargs['obs']})[0]
 
-        max_t = len(rewards)
-        td_errors = (rewards[:-1] + value_preds[:max_t-1] - value_preds[1:max_t]).abs()
+        return loss_value
 
-        return np.mean(np.abs(td_errors))
+    def rnd_update(self, obs):
+        obs = obs.reshape((-1, 64, 64, 3))
+        for i in range(self.train_iters):
+            _, loss_value = self.sess.run([self.train_op, self.error], feed_dict={self.x: obs})
+
+    def update_stats(self, value_preds, episode_logits):
+        self.value_avg.append(np.mean(value_preds))
+        self.value_var.append(np.var(value_preds))
+        self.value_range.append(np.max(value_preds) - np.min(value_preds))
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
+        self.entropy.append((-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy)
+
+    def update_staleness_coeff(self, episode_logits):
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
+        new_staleness_coeff = (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy
+        new_staleness_coeff = max(0, min(1, new_staleness_coeff))
+        self.staleness_coef = new_staleness_coeff
 
     @property
     def requires_value_buffers(self):
-        return self.strategy in ['gae', 'value_l1', 'one_step_td_error']    
+        return self.strategy in ['value_l1']    
+
+    @property
+    def requires_obs_buffers(self):
+        return self.strategy in ['rnd']    
 
     def _update_with_rollouts(self, rollouts, score_function):
         level_seeds = rollouts.level_seeds
@@ -115,6 +181,15 @@ class LevelSampler():
         done = ~(rollouts.masks > 0)
         total_steps, num_actors = policy_logits.shape[:2]
         num_decisions = len(policy_logits)
+
+        if self.strategy == 'rnd':
+            self.rnd_update(rollouts.obs)
+        self.iter += 1
+
+        episode_logits = policy_logits.reshape(-1, 15)
+        episode_logits = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
+        self.update_staleness_coeff(episode_logits)
+        self.update_stats(rollouts.value_preds.reshape(-1, 1), episode_logits)
 
         for actor_index in range(num_actors):
             done_steps = np.array(done[:,actor_index].nonzero()).T[:total_steps,0]
@@ -131,13 +206,17 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:t,actor_index]
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:t,actor_index]
                     score_function_kwargs['rewards'] = rollouts.rewards[start_t:t,actor_index]
                     score_function_kwargs['value_preds'] = rollouts.value_preds[start_t:t,actor_index]
+                if self.requires_obs_buffers:
+                    score_function_kwargs['obs'] = rollouts.obs[start_t:t,actor_index]
 
                 score = score_function(**score_function_kwargs)
+
                 num_steps = len(episode_logits)
                 self.update_seed_score(actor_index, seed_idx_t, score, num_steps)
 
@@ -149,11 +228,14 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:,actor_index]
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:,actor_index]
                     score_function_kwargs['rewards'] = rollouts.rewards[start_t:,actor_index]
                     score_function_kwargs['value_preds'] = rollouts.value_preds[start_t:,actor_index]
+                if self.requires_obs_buffers:
+                    score_function_kwargs['obs'] = rollouts.obs[start_t:,actor_index]
 
                 score = score_function(**score_function_kwargs)
                 num_steps = len(episode_logits)
@@ -183,6 +265,13 @@ class LevelSampler():
         seed = self.seeds[seed_idx]
 
         self._update_staleness(seed_idx)
+
+        self.sampled_levels.append(int(seed))
+
+        if self.strategy == 'rnd' and self.iter < self.random_sampling_iters:
+            seed_idx = np.random.choice(range((len(self.seeds))))
+            seed = self.seeds[seed_idx]
+            return int(seed)
 
         return int(seed)
 

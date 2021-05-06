@@ -4,31 +4,25 @@ import numpy as np
 import os.path as osp
 from baselines import logger
 from collections import deque
+import tensorflow as tf
 from baselines.common import explained_variance, set_global_seeds
-from baselines.common.vec_env import VecExtractDictObs, VecMonitor, VecNormalize
-from data_aug_replay_ppo2.policy import build_policy
 try:
     from mpi4py import MPI
 except ImportError:
     MPI = None
-from data_aug_replay_ppo2.runner import Runner, EvalRunner
-from data_aug_replay_ppo2.envs import VecProcgen
-from data_aug_replay_ppo2.level_sampler import LevelSampler
-from data_aug_replay_ppo2.storage import RolloutStorage
-from procgen_replay.procgen import ProcgenEnv
 
+from .runner import RunnerWithAugs
+from .policy import build_policy
 
 def constfn(val):
     def f(_):
         return val
     return f
 
-def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
+def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
-            log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
-            save_interval=0, load_path=None, model_fn=None, update_fn=None, init_fn=None, mpi_rank_weight=1, comm=None,
-            num_processes=64, num_steps=256, level_replay_temperature=0.1, level_replay_rho=1.0, level_replay_nu=0.5, level_replay_alpha=1.0,
-            staleness_coef=0.1, staleness_temperature=1.0, level_sampler_strategy='value_l1', score_transform='rank', **network_kwargs):
+            log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, data_aug="no_aug", use_rand_conv=False,
+            save_interval=0, load_path=None, model_fn=None, update_fn=None, init_fn=None, mpi_rank_weight=1, comm=None, **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -92,44 +86,6 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
     else: assert callable(cliprange)
     total_timesteps = int(total_timesteps)
 
-    level_sampler_args = dict(
-        num_actors=num_processes,
-        strategy=level_sampler_strategy,
-        replay_schedule='proportionate',
-        score_transform=score_transform,
-        temperature=level_replay_temperature,
-        rho=level_replay_rho,
-        nu=level_replay_nu, 
-        alpha=level_replay_alpha,
-        staleness_coef=staleness_coef,
-        staleness_transform='power',
-        staleness_temperature=staleness_temperature
-    )
-
-    env = ProcgenEnv(num_envs=num_processes, env_name='fruitbot', \
-        num_levels=1, start_level=start_level, \
-        distribution_mode='easy',
-        paint_vel_info=False)
-    env = VecExtractDictObs(env, "rgb")
-    env = VecMonitor(venv=env, filename=None, keep_buf=100)
-    env = VecNormalize(venv=env, ob=False, ret=True)
-
-    seeds = [start_level + i for i in range(num_levels)]
-
-    level_sampler = LevelSampler(
-        seeds, 
-        env.observation_space, env.action_space,
-        **level_sampler_args)
-
-    env = VecProcgen(env, level_sampler=level_sampler)
-
-    rollouts = RolloutStorage(num_steps, num_processes, env.observation_space.shape, env.action_space)
-
-    level_seeds = np.zeros(num_processes)
-    obs, level_seeds = env.reset()
-    level_seeds = level_seeds.reshape(-1, 1)
-    rollouts.obs[0] = obs
-
     policy = build_policy(env, network, **network_kwargs)
 
     # Get the nb of env
@@ -155,10 +111,15 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
 
     if load_path is not None:
         model.load(load_path)
+        if model.fix_representation:
+            model.sess.run(model._init_op)
+            if MPI is not None:
+                model._sync_param()
+
     # Instantiate the runner object
-    runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam, rollouts=rollouts)
+    runner = RunnerWithAugs(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam, data_aug=data_aug, is_train=mpi_rank_weight > 0)
     if eval_env is not None:
-        eval_runner = EvalRunner(env = eval_env, model = model, nsteps = nsteps, gamma = gamma, lam= lam)
+        eval_runner = RunnerWithAugs(env=eval_env, model=model, nsteps=nsteps, gamma=gamma, lam=lam, data_aug=data_aug, is_train=False)
 
     epinfobuf = deque(maxlen=100)
     if eval_env is not None:
@@ -166,6 +127,11 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
 
     if init_fn is not None:
         init_fn()
+
+    if use_rand_conv and mpi_rank_weight > 0:  # No rand conv for test worker
+        rand_processes = [v for v in tf.global_variables() if 'randcnn' in v.name]
+        assert len(rand_processes) > 0
+        init_process = tf.variables_initializer(rand_processes)
 
     # Start total timer
     tfirststart = time.perf_counter()
@@ -180,25 +146,26 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
         lrnow = lr(frac)
         # Calculate the cliprange
         cliprangenow = cliprange(frac)
+        # Set the learning rate for training discriminator
+        lr_disc = 1e-4
 
         if update % log_interval == 0 and is_mpi_root: logger.info('Stepping environment...')
 
+        if use_rand_conv and mpi_rank_weight > 0:
+            model.sess.run(init_process)
+            logger.info('Randomizing parameters...')
+
         # Get minibatch
-        obs, returns, masks, actions, values, neglogpacs, states, epinfos, = runner.run(level_seeds=level_seeds) #pylint: disable=E0632
+        obs, returns, masks, actions, values, neglogpacs, states, epinfos = runner.run() #pylint: disable=E0632
+
         if eval_env is not None:
-            eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos, = eval_runner.run() #pylint: disable=E0632
+            eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos = eval_runner.run() #pylint: disable=E0632
 
         if update % log_interval == 0 and is_mpi_root: logger.info('Done.')
 
         epinfobuf.extend(epinfos)
         if eval_env is not None:
             eval_epinfobuf.extend(eval_epinfos)
-
-        # Update level sampler
-        level_sampler.update_with_rollouts(rollouts)
-
-        rollouts.after_update()
-        level_sampler.after_update()
 
         # Here what we're going to do is for each minibatch calculate the loss and append it.
         mblossvals = []
@@ -266,15 +233,7 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
             print('Saving to', savepath)
             model.save(savepath)
 
-    # np.save('gdrive/MyDrive/182 Project/value_avg.npy', level_sampler.value_avg)
-    # np.save('gdrive/MyDrive/182 Project/value_var.npy', level_sampler.value_var)
-    # np.save('gdrive/MyDrive/182 Project/value_range.npy', level_sampler.value_range)
-    # np.save('gdrive/MyDrive/182 Project/entropy.npy', level_sampler.entropy)
-
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
-
-
-

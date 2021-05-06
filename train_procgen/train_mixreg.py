@@ -3,16 +3,16 @@ import argparse
 
 import skimage
 import tensorflow as tf
-from data_aug_replay_ppo2 import ppo2
+from baselines.ppo2 import ppo2
 from baselines.common.mpi_util import setup_mpi_gpus
 from baselines.common.vec_env import VecExtractDictObs, VecMonitor, VecNormalize
 from baselines import logger
-from procgen_replay.procgen import ProcgenEnv
+from procgen import ProcgenEnv
 from mpi4py import MPI
 
-from data_aug_replay_ppo2.model import get_mixreg_model
-from data_aug_replay_ppo2.ppo2 import learn
-from baselines.common.models import build_impala_cnn
+from mixreg.model import get_mixreg_model
+from mixreg.ppo2 import learn
+from mixreg.network import build_impala_cnn
 
 LOG_DIR = '~/procgen_exp/ppo'
 
@@ -30,16 +30,17 @@ def main():
     ppo_epochs = 3
     clip_range = .2
     max_grad_norm = 0.5
+    timesteps_per_proc = 100_000_000
     use_vf_clipping = True
 
     # Parse arguments
     parser = argparse.ArgumentParser(
         description='Process procgen training arguments.')
-    parser.add_argument('--env_name', type=str, default='fruitbot')
-    parser.add_argument('--distribution_mode', type=str, default='easy',
+    parser.add_argument('--env_name', type=str, default='coinrun')
+    parser.add_argument('--distribution_mode', type=str, default='hard',
                         choices=["easy", "hard", "exploration", "memory", "extreme"])
-    parser.add_argument('--num_levels', type=int, default=50)
-    parser.add_argument('--start_level', type=int, default=500)
+    parser.add_argument('--num_levels', type=int, default=0)
+    parser.add_argument('--start_level', type=int, default=0)
     parser.add_argument('--test_worker_interval', type=int, default=0)
     parser.add_argument('--run_id', type=int, default=1)
     parser.add_argument('--gpus_id', type=str, default='')
@@ -54,13 +55,10 @@ def main():
     parser.add_argument('--mix_mode', type=str, default='nomix',
                         choices=['nomix', 'mixreg', 'mixobs'])
     parser.add_argument('--mix_alpha', type=float, default=0.2)
-    parser.add_argument('--timesteps_per_proc', type=int, default=1_000_000)
-    parser.add_argument('--level_sampler_strategy', type=str, default='value_l1')
-    parser.add_argument('--score_transform', type=str, default='rank')
-    parser.add_argument('--save_dir', type=str, default='gdrive/MyDrive/182 Project/')
+    parser.add_argument('--timesteps_per_proc', type=float, default=1_000_000)
+    parser.add_argument('--save_dir', type=str, default='gdrive/MyDrive/182 Project/mixreg')
     args = parser.parse_args()
 
-    timesteps_per_proc = args.timesteps_per_proc
     log_dir = args.save_dir
 
     # Setup test worker
@@ -93,6 +91,12 @@ def main():
 
     # Create env
     logger.info("creating environment")
+    venv = ProcgenEnv(num_envs=num_envs, env_name=env_name, num_levels=num_levels,
+                      start_level=start_level, distribution_mode=args.distribution_mode)
+    venv = VecExtractDictObs(venv, "rgb")
+    venv = VecMonitor(venv=venv, filename=None, keep_buf=100)
+    venv = VecNormalize(venv=venv, ob=False)
+
     eval_env = ProcgenEnv(num_envs=num_envs, env_name=env_name, num_levels=500, start_level=0, distribution_mode=args.distribution_mode)
     eval_env = VecExtractDictObs(eval_env, "rgb")
     eval_env = VecMonitor(
@@ -125,10 +129,9 @@ def main():
     logger.info("training")
     ppo2.learn = learn  # use customized "learn" function
     model = ppo2.learn(
+        env=venv,
         network=conv_fn,
-        total_timesteps=timesteps_per_proc,
-        num_levels=num_levels,
-        start_level=start_level,
+        total_timesteps=args.timesteps_per_proc,
         eval_env=eval_env,
         save_interval=0,
         nsteps=nsteps,
@@ -148,8 +151,7 @@ def main():
         vf_coef=vf_coef,
         max_grad_norm=max_grad_norm,
         data_aug=args.data_aug,
-        level_sampler_strategy=args.level_sampler_strategy,
-        score_transform=args.score_transform,
+        use_rand_conv=args.use_rand_conv,
         model_fn=get_mixreg_model(mix_mode=args.mix_mode, mix_alpha=args.mix_alpha,
                                   use_l2reg=args.use_l2reg, l2reg_coeff=args.l2reg_coeff),
     )

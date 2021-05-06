@@ -17,6 +17,9 @@ def cnn_small(layer_names=['c1', 'c2', 'fc1'], **conv_kwargs):
         return h
     return network_fn
 
+MAX_ENTROPY = 0.003280711731851355
+MIN_ENTROPY = 0.00292236834768195
+
 class LevelSampler():
     def __init__(
         self, seeds, obs_space, action_space, num_actors=1, 
@@ -64,9 +67,15 @@ class LevelSampler():
             initialize()
 
             self.train_iters = 1
+            self.random_sampling_iters = 150
 
         self.sampled_levels = []
         self.iter = 0
+
+        self.value_avg = []
+        self.value_var = []
+        self.value_range = []
+        self.entropy = []
 
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
@@ -143,6 +152,28 @@ class LevelSampler():
         for i in range(self.train_iters):
             _, loss_value = self.sess.run([self.train_op, self.error], feed_dict={self.x: obs})
 
+    def update_stats(self, value_preds, episode_logits):
+        self.value_avg.append(np.mean(value_preds))
+        self.value_var.append(np.var(value_preds))
+        self.value_range.append(np.max(value_preds) - np.min(value_preds))
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
+        self.entropy.append((-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy)
+
+    def update_staleness_coeff(self, episode_logits):
+        num_actions = self.action_space.n
+        max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
+        new_staleness_coeff = (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy
+        new_staleness_coeff = max(0, min(1, new_staleness_coeff))
+        self.staleness_coef = new_staleness_coeff
+
+    def save_obs(self, obs, returns, value_preds):
+        advantages = returns - value_preds
+        max_arg = np.argmax(np.abs(advantages))
+        min_arg = np.argmin(np.abs(advantages))
+        np.save('gdrive/MyDrive/182 Project/obs/iter_{}_advantage_{}.npy'.format(self.iter, np.round(np.abs(advantages[max_arg]), 3)), obs[max_arg])
+        np.save('gdrive/MyDrive/182 Project/obs/iter_{}_advantage_{}.npy'.format(self.iter, np.round(np.abs(advantages[min_arg]), 3)), obs[min_arg])
+
     @property
     def requires_value_buffers(self):
         return self.strategy in ['value_l1']    
@@ -162,6 +193,8 @@ class LevelSampler():
             self.rnd_update(rollouts.obs)
         self.iter += 1
 
+        self.save_obs(rollouts.obs.reshape(-1, 64, 64, 3), rollouts.returns.reshape(-1), rollouts.value_preds.reshape(-1))
+
         for actor_index in range(num_actors):
             done_steps = np.array(done[:,actor_index].nonzero()).T[:total_steps,0]
             start_t = 0
@@ -177,7 +210,7 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:t,actor_index]
-                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:t,actor_index]
@@ -199,7 +232,7 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:,actor_index]
-                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:,actor_index]
@@ -239,7 +272,10 @@ class LevelSampler():
 
         self.sampled_levels.append(int(seed))
 
-        # print(seed)
+        if self.strategy == 'rnd' and self.iter < self.random_sampling_iters:
+            seed_idx = np.random.choice(range((len(self.seeds))))
+            seed = self.seeds[seed_idx]
+            return int(seed)
 
         return int(seed)
 
@@ -256,7 +292,7 @@ class LevelSampler():
         if not strategy:
             strategy = self.strategy
 
-        if strategy == 'random' or self.iter < 150:
+        if strategy == 'random':
             seed_idx = np.random.choice(range((len(self.seeds))))
             seed = self.seeds[seed_idx]
             return int(seed)
