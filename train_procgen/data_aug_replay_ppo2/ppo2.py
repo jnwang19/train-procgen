@@ -266,10 +266,10 @@ def learn(*, network, total_timesteps, num_levels=50, start_level=500, eval_env 
             print('Saving to', savepath)
             model.save(savepath)
 
-    np.save('gdrive/MyDrive/182 Project/value_avg.npy', level_sampler.value_avg)
-    np.save('gdrive/MyDrive/182 Project/value_var.npy', level_sampler.value_var)
-    np.save('gdrive/MyDrive/182 Project/value_range.npy', level_sampler.value_range)
-    np.save('gdrive/MyDrive/182 Project/entropy.npy', level_sampler.entropy)
+    # np.save('gdrive/MyDrive/182 Project/value_avg.npy', level_sampler.value_avg)
+    # np.save('gdrive/MyDrive/182 Project/value_var.npy', level_sampler.value_var)
+    # np.save('gdrive/MyDrive/182 Project/value_range.npy', level_sampler.value_range)
+    # np.save('gdrive/MyDrive/182 Project/entropy.npy', level_sampler.entropy)
 
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)

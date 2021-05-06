@@ -163,7 +163,7 @@ class LevelSampler():
     def update_staleness_coeff(self, episode_logits):
         num_actions = self.action_space.n
         max_entropy = -(1./num_actions)*np.log(1./num_actions)*num_actions
-        new_staleness_coeff = 1 - (MAX_ENTROPY - (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy) / (MAX_ENTROPY - MIN_ENTROPY)
+        new_staleness_coeff = (-np.exp(episode_logits)*episode_logits).sum(-1).mean()/max_entropy
         new_staleness_coeff = max(0, min(1, new_staleness_coeff))
         self.staleness_coef = new_staleness_coeff
 
@@ -187,9 +187,9 @@ class LevelSampler():
         self.iter += 1
 
         episode_logits = policy_logits.reshape(-1, 15)
-        episode_logits = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
+        episode_logits = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
         self.update_staleness_coeff(episode_logits)
-        # self.update_stats(rollouts.value_preds.reshape(-1, 1), episode_logits)
+        self.update_stats(rollouts.value_preds.reshape(-1, 1), episode_logits)
 
         for actor_index in range(num_actors):
             done_steps = np.array(done[:,actor_index].nonzero()).T[:total_steps,0]
@@ -206,7 +206,7 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:t,actor_index]
-                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:t,actor_index]
@@ -228,7 +228,7 @@ class LevelSampler():
 
                 score_function_kwargs = {}
                 episode_logits = policy_logits[start_t:,actor_index]
-                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits) / np.sum(np.exp(episode_logits), axis=0))
+                score_function_kwargs['episode_logits'] = np.log(np.exp(episode_logits).T / np.sum(np.exp(episode_logits), axis=1)).T
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:,actor_index]
