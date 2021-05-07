@@ -84,7 +84,7 @@ def main():
 
     # Setup logger
     log_comm = comm.Split(1 if is_test_worker else 0, 0)
-    format_strs = ['csv', 'stdout'] if log_comm.Get_rank() == 0 else []
+    format_strs = ['csv', 'stdout','tensorboard'] if log_comm.Get_rank() == 0 else []
     logger.configure(
         dir=log_dir +
         f'/{args.level_setup}/{args.mix_mode}/{env_name}/run_{args.run_id}',
