@@ -30,6 +30,8 @@ python train_procgen/train.py --env_name fruitbot --distribution_mode easy --num
 
 `--save_dir` = directory to save model and logs in the `models/` and `logs/` subdirectories respectively
 
+`--model_name` = model and logs will be stored in `[SAVE_DIR]/models/[MODEL_NAME]` and `[SAVE_DIR]/logs/[MODEL_NAME]/progress.csv` respectively
+
 ```
 python train-procgen/train_procgen/train_plr.py --timesteps_per_proc 5_000_000 --level_sampler_strategy policy_entropy --score_transform softmax --model_name entropy_softmax_fixed --save_dir [SAVE_DIR]
 ```
