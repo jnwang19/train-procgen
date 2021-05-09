@@ -1,5 +1,5 @@
 gym==0.15.4
 tensorflow==1.15.0
 procgen
-mpi4py
+mpi4py==3.0.3
 tqdm
