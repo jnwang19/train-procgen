@@ -17,8 +17,7 @@ def cnn_small(layer_names=['c1', 'c2', 'fc1'], **conv_kwargs):
         return h
     return network_fn
 
-MAX_ENTROPY = 0.003280711731851355
-MIN_ENTROPY = 0.00292236834768195
+SAVE_OBS_DIR = 'gdrive/MyDrive/182 Project/obs/'
 
 class LevelSampler():
     def __init__(
@@ -26,7 +25,7 @@ class LevelSampler():
         strategy='random', replay_schedule='fixed', score_transform='power',
         temperature=1.0, eps=0.05,
         rho=0.2, nu=0.5, alpha=1.0, 
-        staleness_coef=0, staleness_transform='power', staleness_temperature=1.0):
+        staleness_coef=0, staleness_transform='power', staleness_temperature=1.0, save_obs_flag=False):
         self.obs_space = obs_space
         self.action_space = action_space
         self.strategy = strategy
@@ -76,6 +75,7 @@ class LevelSampler():
         self.value_var = []
         self.value_range = []
         self.entropy = []
+        self.save_obs_flag = save_obs_flag
 
     def seed_range(self):
         return (int(min(self.seeds)), int(max(self.seeds)))
@@ -171,8 +171,8 @@ class LevelSampler():
         advantages = returns - value_preds
         max_arg = np.argmax(np.abs(advantages))
         min_arg = np.argmin(np.abs(advantages))
-        np.save('gdrive/MyDrive/182 Project/obs/iter_{}_advantage_{}.npy'.format(self.iter, np.round(np.abs(advantages[max_arg]), 3)), obs[max_arg])
-        np.save('gdrive/MyDrive/182 Project/obs/iter_{}_advantage_{}.npy'.format(self.iter, np.round(np.abs(advantages[min_arg]), 3)), obs[min_arg])
+        np.save(SAVE_OBS_DIR + 'iter_{}_advantage_{}.npy'.format(self.iter, np.round(np.abs(advantages[max_arg]), 3)), obs[max_arg])
+        np.save(SAVE_OBS_DIR + 'iter_{}_advantage_{}.npy'.format(self.iter, np.round(np.abs(advantages[min_arg]), 3)), obs[min_arg])
 
     @property
     def requires_value_buffers(self):
@@ -193,7 +193,8 @@ class LevelSampler():
             self.rnd_update(rollouts.obs)
         self.iter += 1
 
-        self.save_obs(rollouts.obs.reshape(-1, 64, 64, 3), rollouts.returns.reshape(-1), rollouts.value_preds.reshape(-1))
+        if self.save_obs_flag:
+            self.save_obs(rollouts.obs.reshape(-1, 64, 64, 3), rollouts.returns.reshape(-1), rollouts.value_preds.reshape(-1))
 
         for actor_index in range(num_actors):
             done_steps = np.array(done[:,actor_index].nonzero()).T[:total_steps,0]

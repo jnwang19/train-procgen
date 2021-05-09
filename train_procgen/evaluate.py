@@ -161,7 +161,7 @@ def main():
     parser.add_argument('--env_name', type=str, default='fruitbot')
     parser.add_argument('--distribution_mode', type=str, default='easy', choices=["easy", "hard", "exploration", "memory", "extreme"])
     parser.add_argument('--num_levels', type=int, default=500)
-    parser.add_argument('--start_level', type=int, default=500)
+    parser.add_argument('--start_level', type=int, default=0)
     parser.add_argument('--num_trials', type=int, default=3)
     parser.add_argument('--gui', action='store_true')
 
