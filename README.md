@@ -1,5 +1,5 @@
 # CS 182 RL Project
-TODO Add summary
+This repository contains the code for training and evaluating models on Procgen environments. The code includes adaptations from [Prioritized Level Replay](https://github.com/facebookresearch/level-replay), [Mixreg](https://github.com/kaixin96/mixreg), and [AugMix](https://github.com/google-research/augmix).
 
 ## Setup
 We recommend running the code in the provided notebook `fruitbot.ipynb` on Google Colab, as CMake is required.
