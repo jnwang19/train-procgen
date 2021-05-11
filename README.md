@@ -20,7 +20,7 @@ python train-procgen/train_procgen/procgen_replay/setup.py install
 ## Baseline
 50 training levels:
 ```
-python train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --log_dir [LOG_DIR]
+python train-procgen/train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --log_dir [LOG_DIR]
 ```
 
 ## Prioritized Level Replay
