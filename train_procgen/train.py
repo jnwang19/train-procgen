@@ -12,7 +12,7 @@ from baselines.common.vec_env import (
 from baselines import logger
 from mpi4py import MPI
 import argparse
-from .alternate_ppo2 import alt_ppo2
+from alternate_ppo2 import alt_ppo2
 
 def train_fn(env_name, num_envs, distribution_mode, num_levels, start_level, timesteps_per_proc, args, is_test_worker=False, log_dir='./tmp/procgen', comm=None, alternate_ppo=False, do_eval=False, eval_num_envs=None, eval_env_name=None, eval_num_levels=None, eval_start_level=None, eval_distribution_mode=None, do_test=False, test_num_envs=None, test_env_name=None, test_num_levels=None, test_start_level=None, test_distribution_mode=None):
     learning_rate = 5e-4
