@@ -44,15 +44,20 @@ python train-procgen/train_procgen/train_plr.py --timesteps_per_proc 5_000_000 -
 python train-procgen/train_procgen/train_mixreg.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --mix_mode mixreg --timesteps_per_proc 5_000_000 --save_dir [SAVE_DIR]
 ```
 
-## Augmix
-`--mixture_width` = Number of augmentation chains to mix per augmented example
-`--mixture_depth` = Depth of augmentation chains. -1 denotes stochastic depth in [1, 3]
-`--aug_severity` = Severity of base augmentation operators
-`--aug_prob_coeff` = Probability distribution coefficients
-`--autoaug_policy_idx` = model choice of 0, 1, 2 (0:ImageNetPolicy 1:CIFAR10Policy 2:SVHNPolicy)
+## AugMix
+`--mixture_width` = number of augmentation chains to mix per augmented example
+
+`--mixture_depth` = depth of augmentation chains. -1 denotes stochastic depth in [1, 3]
+
+`--aug_severity` = severity of base augmentation operators
+
+`--aug_prob_coeff` = probability distribution coefficients
+
+`--autoaug_policy_idx` = model choice of 0, 1, 2 (0:ImageNetPolicy, 1:CIFAR10Policy, 2:SVHNPolicy)
+
+`--log_dir` = directory to save model and logs
 ```
-python -m train_procgen.train --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 1850 --timesteps_per_proc 5_000_000 --do_eval --do_test 
---log_dir "/log" --alternate_ppo --do_aug --autoaugment --autoaug_policy_idx 2
+python train-procgen/train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --do_test --log_dir [LOG_DIR] --alternate_ppo --do_aug --autoaugment --autoaug_policy_idx 2
 ```
 
 ## Prioritized Level Replay + Mixreg
