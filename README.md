@@ -53,11 +53,9 @@ python train-procgen/train_procgen/train_mixreg.py --env_name fruitbot --distrib
 
 `--aug_prob_coeff` = probability distribution coefficients
 
-`--autoaug_policy_idx` = model choice of 0, 1, 2 (0:ImageNetPolicy, 1:CIFAR10Policy, 2:SVHNPolicy)
-
 `--log_dir` = directory to save model and logs
 ```
-python train-procgen/train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --do_test --log_dir [LOG_DIR] --alternate_ppo --do_aug --autoaugment --autoaug_policy_idx 2
+python train-procgen/train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --do_test --log_dir [LOG_DIR] --alternate_ppo --do_aug --automix
 ```
 
 ## Prioritized Level Replay + Mixreg
