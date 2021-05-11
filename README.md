@@ -2,7 +2,7 @@
 TODO Add summary
 
 ## Setup
-We recommend running the code in the provided notebook `fruitbot.ipynb` on Google Colab.
+We recommend running the code in the provided notebook `fruitbot.ipynb` on Google Colab, as CMake is required.
 
 To run locally:
 ```
