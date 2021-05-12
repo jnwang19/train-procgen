@@ -54,8 +54,11 @@ python train-procgen/train_procgen/train_mixreg.py --env_name fruitbot --distrib
 `--aug_prob_coeff` = probability distribution coefficients
 
 `--log_dir` = directory to save model and logs
+
+To change which augmentations you want to use, open train_procgen/alternate_ppo2/augmentations/augmentations.py and add any of the augmentations in "unused_augmentations" to the augmentations array.
+
 ```
-python train-procgen/train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --do_test --log_dir [LOG_DIR] --alternate_ppo --do_aug --automix
+python train-procgen/train_procgen/train.py --env_name fruitbot --distribution_mode easy --num_levels 50 --start_level 500 --timesteps_per_proc 5_000_000 --do_test --log_dir [LOG_DIR] --alternate_ppo --augmix
 ```
 
 ## Prioritized Level Replay + Mixreg
